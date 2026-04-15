@@ -1,4 +1,6 @@
 // src/components/DataTable.tsx
+import { useState } from "react";
+import JSZip from "jszip";
 import type { StudentRecord, SelectedImage } from "../types";
 
 interface ThumbnailProps {
@@ -88,6 +90,99 @@ function Thumbnail({ img, isSelected, onSelect, onClick }: ThumbnailProps) {
   );
 }
 
+function extFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const ext = pathname.split(".").pop()?.split("?")[0]?.toLowerCase();
+    if (ext && /^(jpg|jpeg|png|gif|webp|avif|svg)$/.test(ext)) return `.${ext}`;
+  } catch { /* ignore */ }
+  return ".jpg";
+}
+
+function DownloadButton({ record, imageColumns }: { record: StudentRecord; imageColumns: string[] }) {
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+
+  async function handleDownload() {
+    const images = imageColumns
+      .filter((col) => record.images[col])
+      .map((col) => ({ col, url: record.images[col] }));
+    if (images.length === 0) return;
+
+    setState("loading");
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(record.student_id)!;
+
+      await Promise.allSettled(
+        images.map(async ({ col, url }) => {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const ext = extFromUrl(url);
+          folder.file(`${col}${ext}`, blob);
+        })
+      );
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = `${record.student_id}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setState("idle");
+    } catch {
+      setState("error");
+      setTimeout(() => setState("idle"), 2000);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={state === "loading"}
+      aria-label={`Download all images for ${record.student_id}`}
+      title={`Download ${record.student_id}.zip`}
+      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-all duration-150 disabled:opacity-40"
+      style={{
+        fontFamily: "var(--font-mono)",
+        background: state === "error" ? "rgba(239,68,68,0.07)" : "transparent",
+        borderColor: state === "error"
+          ? "rgba(239,68,68,0.30)"
+          : "rgba(255,255,255,0.10)",
+        color: state === "error"
+          ? "rgba(252,165,165,0.9)"
+          : "rgba(255,255,255,0.45)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {state === "loading" ? (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-spin">
+            <path d="M21 12a9 9 0 11-6.219-8.56" />
+          </svg>
+          loading
+        </>
+      ) : state === "error" ? (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+          failed
+        </>
+      ) : (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          .zip
+        </>
+      )}
+    </button>
+  );
+}
+
 interface DataTableProps {
   records: StudentRecord[];
   imageColumns: string[];
@@ -157,6 +252,7 @@ export function DataTable({
                 {col}
               </th>
             ))}
+            <th style={{ ...thStyle, textAlign: "right" }}>download</th>
           </tr>
         </thead>
         <tbody>
@@ -178,9 +274,7 @@ export function DataTable({
                   borderBottom: "1px solid rgba(255,255,255,0.05)",
                 }}
               >
-                <td style={{ padding: "10px 16px", width: 44 }}>
-                  {/* no row-level checkbox; per-image only */}
-                </td>
+                <td style={{ padding: "10px 16px", width: 44 }} />
                 <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                   <span
                     className="text-xs"
@@ -217,6 +311,9 @@ export function DataTable({
                     </td>
                   );
                 })}
+                <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                  <DownloadButton record={record} imageColumns={imageColumns} />
+                </td>
               </tr>
             );
           })}
