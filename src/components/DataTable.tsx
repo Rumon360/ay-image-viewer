@@ -12,7 +12,7 @@ interface ThumbnailProps {
 
 function Thumbnail({ img, isSelected, onSelect, onClick }: ThumbnailProps) {
   return (
-    <div className="relative w-24 h-24 shrink-0 group">
+    <div className="relative w-[150px] h-[150px] shrink-0 group">
       {/* Checkbox */}
       <button
         onClick={(e) => {
@@ -43,7 +43,7 @@ function Thumbnail({ img, isSelected, onSelect, onClick }: ThumbnailProps) {
       <button
         onClick={onClick}
         aria-label={`View ${img.column} for ${img.student_id}`}
-        className="w-24 h-24 rounded-sm overflow-hidden border transition-all duration-150 block"
+        className="w-[150px] h-[150px] rounded-sm overflow-hidden border transition-all duration-150 block"
         style={{
           borderColor: isSelected
             ? "rgba(0,255,255,0.45)"
@@ -291,7 +291,7 @@ export function DataTable({
                   if (!url) {
                     return (
                       <td key={col} style={{ padding: "10px 16px" }}>
-                        <div className="w-24 h-24" />
+                        <div className="w-[150px] h-[150px]" />
                       </td>
                     );
                   }
