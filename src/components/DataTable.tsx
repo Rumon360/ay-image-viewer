@@ -12,7 +12,7 @@ interface ThumbnailProps {
 
 function Thumbnail({ img, isSelected, onSelect, onClick }: ThumbnailProps) {
   return (
-    <div className="relative w-[150px] h-[150px] shrink-0 group">
+    <div className="relative w-37.5 h-37.5 shrink-0 group">
       {/* Checkbox */}
       <button
         onClick={(e) => {
@@ -43,7 +43,7 @@ function Thumbnail({ img, isSelected, onSelect, onClick }: ThumbnailProps) {
       <button
         onClick={onClick}
         aria-label={`View ${img.column} for ${img.student_id}`}
-        className="w-[150px] h-[150px] rounded-sm overflow-hidden border transition-all duration-150 block"
+        className="w-37.5 h-37.5 rounded-sm overflow-hidden border transition-all duration-150 block"
         style={{
           borderColor: isSelected
             ? "rgba(0,255,255,0.45)"
@@ -95,12 +95,48 @@ function extFromUrl(url: string): string {
     const pathname = new URL(url).pathname;
     const ext = pathname.split(".").pop()?.split("?")[0]?.toLowerCase();
     if (ext && /^(jpg|jpeg|png|gif|webp|avif|svg)$/.test(ext)) return `.${ext}`;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return ".jpg";
 }
 
-function DownloadButton({ record, imageColumns }: { record: StudentRecord; imageColumns: string[] }) {
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+// Try fetch first; fall back to canvas if CORS blocks the fetch.
+// Canvas approach also requires CORS headers — if server sends none,
+// both will fail and the image is skipped.
+async function fetchImageBlob(url: string): Promise<Blob> {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (res.ok) return await res.blob();
+  } catch { /* CORS blocked — try canvas */ }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+        "image/png",
+      );
+    };
+    img.onerror = () => reject(new Error("load failed"));
+    img.src = url;
+  });
+}
+
+function DownloadButton({
+  record,
+  imageColumns,
+}: {
+  record: StudentRecord;
+  imageColumns: string[];
+}) {
+  const [state, setState] = useState<"idle" | "loading" | "partial" | "error">("idle");
+  const [counts, setCounts] = useState<{ ok: number; total: number } | null>(null);
 
   async function handleDownload() {
     const images = imageColumns
@@ -109,30 +145,41 @@ function DownloadButton({ record, imageColumns }: { record: StudentRecord; image
     if (images.length === 0) return;
 
     setState("loading");
-    try {
-      const zip = new JSZip();
-      const folder = zip.folder(record.student_id)!;
+    setCounts(null);
 
-      await Promise.allSettled(
-        images.map(async ({ col, url }) => {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const blob = await res.blob();
-          const ext = extFromUrl(url);
-          folder.file(`${col}${ext}`, blob);
-        })
-      );
+    const zip = new JSZip();
+    const folder = zip.folder(record.student_id)!;
+    let ok = 0;
 
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(zipBlob);
-      a.download = `${record.student_id}.zip`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setState("idle");
-    } catch {
+    await Promise.allSettled(
+      images.map(async ({ col, url }) => {
+        try {
+          const blob = await fetchImageBlob(url);
+          folder.file(`${col}${extFromUrl(url)}`, blob);
+          ok++;
+        } catch { /* skip */ }
+      })
+    );
+
+    if (ok === 0) {
       setState("error");
-      setTimeout(() => setState("idle"), 2000);
+      setTimeout(() => setState("idle"), 2500);
+      return;
+    }
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = `${record.student_id}.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    if (ok < images.length) {
+      setCounts({ ok, total: images.length });
+      setState("partial");
+      setTimeout(() => { setState("idle"); setCounts(null); }, 3000);
+    } else {
+      setState("idle");
     }
   }
 
@@ -145,12 +192,17 @@ function DownloadButton({ record, imageColumns }: { record: StudentRecord; image
       className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-all duration-150 disabled:opacity-40"
       style={{
         fontFamily: "var(--font-mono)",
-        background: state === "error" ? "rgba(239,68,68,0.07)" : "transparent",
-        borderColor: state === "error"
-          ? "rgba(239,68,68,0.30)"
+        background:
+          state === "error" ? "rgba(239,68,68,0.07)"
+          : state === "partial" ? "rgba(255,200,0,0.06)"
+          : "transparent",
+        borderColor:
+          state === "error" ? "rgba(239,68,68,0.30)"
+          : state === "partial" ? "rgba(255,200,0,0.30)"
           : "rgba(255,255,255,0.10)",
-        color: state === "error"
-          ? "rgba(252,165,165,0.9)"
+        color:
+          state === "error" ? "rgba(252,165,165,0.9)"
+          : state === "partial" ? "rgba(255,220,0,0.85)"
           : "rgba(255,255,255,0.45)",
         whiteSpace: "nowrap",
       }}
@@ -167,7 +219,15 @@ function DownloadButton({ record, imageColumns }: { record: StudentRecord; image
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
-          failed
+          CORS blocked
+        </>
+      ) : state === "partial" ? (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          {counts?.ok}/{counts?.total} saved
         </>
       ) : (
         <>
@@ -291,7 +351,7 @@ export function DataTable({
                   if (!url) {
                     return (
                       <td key={col} style={{ padding: "10px 16px" }}>
-                        <div className="w-[150px] h-[150px]" />
+                        <div className="w-37.5 h-37.5" />
                       </td>
                     );
                   }
