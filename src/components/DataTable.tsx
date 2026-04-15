@@ -101,31 +101,13 @@ function extFromUrl(url: string): string {
   return ".jpg";
 }
 
-// Try fetch first; fall back to canvas if CORS blocks the fetch.
-// Canvas approach also requires CORS headers — if server sends none,
-// both will fail and the image is skipped.
+// Route through local Vite proxy to avoid CORS restrictions.
+// The proxy fetches the image server-side and returns it with CORS headers.
 async function fetchImageBlob(url: string): Promise<Blob> {
-  try {
-    const res = await fetch(url, { mode: "cors" });
-    if (res.ok) return await res.blob();
-  } catch { /* CORS blocked — try canvas */ }
-
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext("2d")!.drawImage(img, 0, 0);
-      canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
-        "image/png",
-      );
-    };
-    img.onerror = () => reject(new Error("load failed"));
-    img.src = url;
-  });
+  const proxyUrl = `/img-proxy?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error(`proxy ${res.status}`);
+  return res.blob();
 }
 
 function DownloadButton({
