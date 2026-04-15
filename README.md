@@ -1,75 +1,52 @@
-# React + TypeScript + Vite
+# ay-image-viewer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Upload CSVs with student IDs and image URLs, browse thumbnails in a paginated table, preview images in a lightbox, and generate downloadable PNG collages.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Multi-file CSV upload** — drag-drop or file picker, multiple files at once
+- **Auto-merge by student_id** — columns from different CSVs merged per student; later file wins on duplicate columns
+- **Thumbnail table** — all non-`student_id` columns treated as image URL columns and rendered as 56×56 thumbnails
+- **Complete rows filter** — toggle to show only rows where every image column has a value
+- **Lightbox** — click any thumbnail to preview full-size; keyboard navigate with `←` / `→`, close with `Esc`
+- **Image selection** — per-image checkbox, select-page, clear-all
+- **Collage generator** — configure grid (2×2 → 16×16 or custom 1–32), output size (512–4096px or custom 64–8192px), gap size + color, padding size + color; downloads as PNG
+- **Pagination** — 10 / 25 / 50 / 100 rows per page
 
-## React Compiler
+## CSV format
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+Every CSV must have a `student_id` column (case-insensitive). All other columns are treated as image URL columns.
 
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```csv
+student_id,profile_image,transfer_image
+1001,https://example.com/1001.jpg,https://example.com/1001t.jpg
+1002,https://example.com/1002.jpg,
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Multiple files are merged additively — a student appearing in several files gets all their columns combined.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Stack
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- React 19 + React Compiler (automatic memoization)
+- TypeScript
+- Tailwind CSS v4
+- Vite
+- Vitest
+
+## Getting started
+
+```bash
+npm install
+npm run dev
 ```
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start dev server |
+| `npm run build` | Type-check + production build |
+| `npm run test` | Run tests (Vitest) |
+| `npm run test:watch` | Watch mode |
+| `npm run lint` | ESLint |
+| `npm run preview` | Preview production build |
